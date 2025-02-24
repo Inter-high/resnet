@@ -56,9 +56,42 @@ The training process follows the settings described in the paper:
 1. Verify that a plain network (without residual connections) exhibits increased error as the network depth increases.
 2. Verify that adding residual connections leads to reduced error with increasing network depth.
 3. Verify that networks with residual connections converge faster than traditional plain networks.
+4. Verify that type B is most high accuracy.
 
 ## Results
-- 집가서 작성
+
+### 1. hypothesis 1
+| ![Train Loss](./figure/hypothesis_1/train_loss.jpg) | ![Top5 Error](./figure/hypothesis_1/top5_error.jpg) |
+| ------------------------------------------------------ | --------------------------------------------------- |
+
+### 2. hypothesis 2
+![hypothesis_2_train_loss.jpg](./figure/hypothesis_2/train_loss.jpg) | ![hypothesis_2_top5_error.jpg](./figure/hypothesis_2/top5_error.jpg)
+| ------------------------------------------------------ | --------------------------------------------------- |
+
+### 3. hypothesis 3
+![hypothesis_3_train_loss.jpg](./figure/hypothesis_3/train_loss.jpg) | ![hypothesis_3_top5_error.jpg](./figure/hypothesis_3/top5_error.jpg)
+| ------------------------------------------------------ | --------------------------------------------------- |
+
+### 4. hypothesis 4
+![hypothesis_4_train_loss.jpg](./figure/hypothesis_4/train_loss.jpg) | ![hypothesis_4_top1_error.jpg](./figure/hypothesis_4/top1_error.jpg)
+| ------------------------------------------------------ | --------------------------------------------------- |
+
 
 ## How to Run the Experiment
-- 집가서 작성(train.py 및 config.yaml 변경을 통해 plain 네트워크도 선택가능하게끔 수정필요)
+
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/your-repo-name.git
+   cd your-repo-name
+   ```
+2. Install dependencies:
+   ```sh
+   pip install -r requirements.txt
+   ```
+3. Run the training script:
+     ```sh
+     chmod +x run_experiments.sh
+     ./run_experiments.sh
+     ```
+4. View results:
+   - check **/outputs** folder (It is automatically generated when script is executed.)
