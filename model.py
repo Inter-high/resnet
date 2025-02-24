@@ -1,67 +1,68 @@
+"""
+This file contains implementations of CIFAR-10 networks using plain blocks and residual blocks.
+
+Author: yumemonzo@gmail.com
+Date: 2025-02-24
+"""
+
 import torch
 import torch.nn as nn
+from typing import Type
 
 
 class PlainBlock(nn.Module):
     """
-    CIFAR10 실험을 위한 plain block:
-    두 개의 3x3 conv → BatchNorm → ReLU (순차적으로 적용)
-    residual shortcut 없이 단순히 순차 연산만 수행합니다.
+    A basic block for CIFAR-10 plain networks.
+    Consists of two 3x3 convolutions, each followed by Batch Normalization and ReLU.
+    No residual shortcut is used.
     """
-    expansion = 1
+    expansion: int = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes: int, planes: int, stride: int = 1) -> None:
         super(PlainBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride,
-                               padding=1, bias=False)
+        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
-        
         return out
 
 
 class PlainNet(nn.Module):
     """
-    CIFAR10용 plain network.
-    - 첫 번째 층: 3x3 conv (16 filters)
-    - 이후 세 그룹(layer)을 구성:
-        * layer1: 2n blocks, 16 filters, feature map 크기 32x32
-        * layer2: 2n blocks, 32 filters, 첫 블록에서 stride=2 적용 (16x16)
-        * layer3: 2n blocks, 64 filters, 첫 블록에서 stride=2 적용 (8x8)
-    - 전역 평균 풀링 및 10-way fc layer로 분류.
-    총 weighted layer 수: 6n+2.
+    A plain network for CIFAR-10.
+    Architecture:
+      - Initial 3x3 convolution (16 filters)
+      - Three groups of blocks:
+          * Group 1: 2*n blocks, 16 filters, feature map size 32x32
+          * Group 2: 2*n blocks, 32 filters, first block with stride=2 (16x16)
+          * Group 3: 2*n blocks, 64 filters, first block with stride=2 (8x8)
+      - Global average pooling and a 10-way fully-connected layer.
+    Total weighted layers: 6*n+2.
     """
-    def __init__(self, block, n, num_classes=10):
+    def __init__(self, block: Type[nn.Module], n: int, num_classes: int = 10) -> None:
         super(PlainNet, self).__init__()
-        self.in_planes = 16
+        self.in_planes: int = 16
         
-        # 첫 번째 층: 3x3 conv, 16 filters
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1,
-                               bias=False)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
         self.relu = nn.ReLU(inplace=True)
         
-        # 세 그룹: 각 그룹에 대해 2n개의 block을 쌓음.
-        self.layer1 = self._make_layer(block, 16, 2 * n, stride=1)   # 32x32
-        self.layer2 = self._make_layer(block, 32, 2 * n, stride=2)   # 16x16
-        self.layer3 = self._make_layer(block, 64, 2 * n, stride=2)   # 8x8
+        self.layer1 = self._make_layer(block, 16, 2 * n, stride=1)
+        self.layer2 = self._make_layer(block, 32, 2 * n, stride=2)
+        self.layer3 = self._make_layer(block, 64, 2 * n, stride=2)
         
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(64 * block.expansion, num_classes)
         
-        # 가중치 초기화
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -69,18 +70,15 @@ class PlainNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
                 
-    def _make_layer(self, block, planes, blocks, stride):
+    def _make_layer(self, block: Type[nn.Module], planes: int, blocks: int, stride: int) -> nn.Sequential:
         layers = []
-        # 첫 블록은 stride를 이용해 다운샘플링 (필요한 경우)
         layers.append(block(self.in_planes, planes, stride))
         self.in_planes = planes * block.expansion
-        # 나머지 block은 stride=1
         for _ in range(1, blocks):
             layers.append(block(self.in_planes, planes, stride=1))
         return nn.Sequential(*layers)
     
-    def forward(self, x):
-        # 입력: 32x32, 픽셀별 평균(mean) 제거되어 있다고 가정
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -92,45 +90,41 @@ class PlainNet(nn.Module):
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)
-        
         return out
 
 
 class ResidualBlock(nn.Module):
     """
-    CIFAR10 실험을 위한 Residual block.
-    두 개의 3×3 conv → BatchNorm → ReLU를 적용한 후, shortcut 연결을 통해 입력을 더합니다.
+    A residual block for CIFAR-10.
+    Consists of two 3x3 convolutions, each followed by Batch Normalization and ReLU,
+    with a shortcut connection that adds the input to the output.
     
-    shortcut_type 옵션:
-        - "A": 차원 증가 시 zero-padding 숏컷을 사용하며, 모든 숏컷은 파라미터 없는 항등 매핑.
-        - "B": 차원 증가 시에만 projection 숏컷(1×1 conv + BN)을 사용하고, 나머지는 항등 매핑.
-        - "C": 모든 숏컷을 projection 방식으로 설정.
+    Shortcut types:
+      - "A": Uses zero-padding for increasing dimensions with an identity mapping.
+      - "B": Uses projection (1x1 conv + BN) only when dimensions increase; otherwise identity.
+      - "C": Uses projection for all shortcuts.
     """
-    expansion = 1
+    expansion: int = 1
 
-    def __init__(self, in_planes, planes, stride=1, shortcut_type="B"):
+    def __init__(self, in_planes: int, planes: int, stride: int = 1, shortcut_type: str = "B") -> None:
         super(ResidualBlock, self).__init__()
         self.shortcut_type = shortcut_type
         self.stride = stride
         self.in_planes = in_planes
-        self.out_planes = planes * self.expansion
+        self.out_planes: int = planes * self.expansion
 
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride,
-                               padding=1, bias=False)
+        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1,
-                               padding=1, bias=False)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         
         if shortcut_type == "C":
-            # 옵션 C: 모든 숏컷을 projection 방식으로.
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.out_planes, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(self.out_planes)
             )
         elif shortcut_type == "B":
-            # 옵션 B: 차원 증가 시에만 projection, 그렇지 않으면 항등 매핑.
             if stride != 1 or in_planes != self.out_planes:
                 self.shortcut = nn.Sequential(
                     nn.Conv2d(in_planes, self.out_planes, kernel_size=1, stride=stride, bias=False),
@@ -139,8 +133,6 @@ class ResidualBlock(nn.Module):
             else:
                 self.shortcut = nn.Identity()
         elif shortcut_type == "A":
-            # 옵션 A: 파라미터 없는 zero-padding 숏컷.
-            # 차원 증가(공간적 downsampling 혹은 채널 수 차이)가 필요하면 forward에서 처리.
             if stride != 1 or in_planes != self.out_planes:
                 self.need_pad = True
             else:
@@ -149,11 +141,10 @@ class ResidualBlock(nn.Module):
         else:
             raise ValueError("Invalid shortcut_type. Choose from 'A', 'B', or 'C'.")
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        
         out = self.conv2(out)
         out = self.bn2(out)
         
@@ -161,10 +152,8 @@ class ResidualBlock(nn.Module):
             shortcut = self.shortcut(x)
         elif self.shortcut_type == "A":
             if self.need_pad:
-                # 만약 stride가 1이 아니라면, 공간 downsampling: x의 각 채널을 stride 간격으로 sampling.
                 if self.stride != 1:
                     x = x[:, :, ::self.stride, ::self.stride]
-                # 채널 차이가 있다면, 부족한 채널만큼 0으로 pad (채널 dimension에서 뒤쪽에 추가).
                 ch_pad = self.out_planes - self.in_planes
                 padding = torch.zeros(x.size(0), ch_pad, x.size(2), x.size(3),
                                       device=x.device, dtype=x.dtype)
@@ -172,7 +161,7 @@ class ResidualBlock(nn.Module):
             else:
                 shortcut = x
         else:
-            shortcut = x  # 기본 항등 매핑
+            shortcut = x
         
         out += shortcut
         out = self.relu(out)
@@ -181,23 +170,23 @@ class ResidualBlock(nn.Module):
 
 class ResNet(nn.Module):
     """
-    CIFAR10용 ResNet.
-    - 첫 번째 층: 3×3 conv (16 filters)
-    - 세 그룹(layer): 각 그룹에 2n개의 block을 쌓음
-        * layer1: 16 filters, 32×32 feature map
-        * layer2: 32 filters, 첫 블록에서 stride=2 적용 (16×16)
-        * layer3: 64 filters, 첫 블록에서 stride=2 적용 (8×8)
-    - 전역 평균 풀링 후 10-way fc layer.
-    총 weighted layer 수: 6n+2.
+    A ResNet for CIFAR-10.
+    Architecture:
+      - Initial 3x3 convolution (16 filters)
+      - Three groups of residual blocks:
+          * Group 1: 2*n blocks, 16 filters, feature map size 32x32
+          * Group 2: 2*n blocks, 32 filters, first block with stride=2 (16x16)
+          * Group 3: 2*n blocks, 64 filters, first block with stride=2 (8x8)
+      - Global average pooling and a 10-way fully-connected layer.
+    Total weighted layers: 6*n+2.
     
-    shortcut_type: "A", "B", or "C" (default는 "B")
+    Shortcut type can be "A", "B", or "C" (default "B").
     """
-    def __init__(self, block, n, num_classes=10, shortcut_type="B"):
+    def __init__(self, block: Type[nn.Module], n: int, num_classes: int = 10, shortcut_type: str = "B") -> None:
         super(ResNet, self).__init__()
-        self.in_planes = 16
+        self.in_planes: int = 16
 
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1,
-                               bias=False)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
         self.relu = nn.ReLU(inplace=True)
 
@@ -208,7 +197,6 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(64 * block.expansion, num_classes)
 
-        # 가중치 초기화
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -216,7 +204,7 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def _make_layer(self, block, planes, blocks, stride, shortcut_type):
+    def _make_layer(self, block: Type[nn.Module], planes: int, blocks: int, stride: int, shortcut_type: str) -> nn.Sequential:
         layers = []
         layers.append(block(self.in_planes, planes, stride, shortcut_type))
         self.in_planes = planes * block.expansion
@@ -224,7 +212,7 @@ class ResNet(nn.Module):
             layers.append(block(self.in_planes, planes, stride=1, shortcut_type=shortcut_type))
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -239,21 +227,30 @@ class ResNet(nn.Module):
         return out
     
 
-def get_plain_network(n, num_classes=10):
+def get_plain_network(n: int, num_classes: int = 10) -> PlainNet:
     """
-    CIFAR10 plain network 생성 함수.
-    입력 n에 따라 총 층 수는 6n+2가 됩니다.
-    예) n=3 -> 20-layer, n=9 -> 56-layer network
+    Creates a plain network for CIFAR-10 with 6*n+2 layers.
+
+    Args:
+        n (int): Determines the depth of the network.
+        num_classes (int): Number of output classes.
+
+    Returns:
+        PlainNet: An instance of the plain network.
     """
     return PlainNet(PlainBlock, n, num_classes=num_classes)
 
 
-def get_resnet(n, num_classes=10, shortcut_type="B"):
+def get_resnet(n: int, num_classes: int = 10, shortcut_type: str = "B") -> ResNet:
     """
-    CIFAR10용 ResNet 생성 함수.
-    입력 n에 따라 총 층 수는 6n+2가 됩니다.
-    예: n=3 -> 20-layer, n=9 -> 56-layer network.
-    
-    shortcut_type: "A", "B", or "C"
+    Creates a ResNet for CIFAR-10 with 6*n+2 layers.
+
+    Args:
+        n (int): Determines the depth of the network.
+        num_classes (int): Number of output classes.
+        shortcut_type (str): Type of shortcut to use ("A", "B", or "C").
+
+    Returns:
+        ResNet: An instance of the ResNet.
     """
     return ResNet(ResidualBlock, n, num_classes=num_classes, shortcut_type=shortcut_type)

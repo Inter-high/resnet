@@ -1,24 +1,35 @@
+"""
+Utility functions for loading and preprocessing the CIFAR-10 dataset using PyTorch and torchvision.
+
+Author: yumemonzo@gmail.com
+Date: 2025-02-24
+"""
+
 import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset, random_split
+from typing import Tuple
 
 
-def get_transforms():
-    # CIFAR10의 통상적인 평균과 표준편차 값
+def get_transforms() -> Tuple[transforms.Compose, transforms.Compose]:
+    """
+    Returns the training and testing transforms for the CIFAR-10 dataset.
+
+    Returns:
+        Tuple[transforms.Compose, transforms.Compose]: A tuple containing the training transform and testing transform.
+    """
     cifar10_mean = (0.4914, 0.4822, 0.4465)
-    cifar10_std  = (0.2023, 0.1994, 0.2010)
+    cifar10_std = (0.2023, 0.1994, 0.2010)
 
-    # 학습 시 적용할 transform: 4픽셀 패딩, 32x32 랜덤 크롭, 수평 뒤집기, 텐서 변환, 정규화(픽셀평균 제거)
     train_transform = transforms.Compose([
-        transforms.Pad(4),                # 모든 측면에 4픽셀 패딩
-        transforms.RandomCrop(32),        # 32x32 랜덤 크롭
-        transforms.RandomHorizontalFlip(),# 수평 뒤집기
+        transforms.Pad(4),
+        transforms.RandomCrop(32),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(cifar10_mean, cifar10_std)
     ])
 
-    # 검증 및 테스트 시 적용할 transform: augmentation 없이 단순 ToTensor 및 정규화
     test_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(cifar10_mean, cifar10_std)
@@ -26,27 +37,47 @@ def get_transforms():
     
     return train_transform, test_transform
 
-def create_train_valid_split(seed, train_dataset, valid_dataset):
-    num_samples = len(train_dataset)  # 일반적으로 50000
+
+def create_train_valid_split(seed: int, train_dataset: torch.utils.data.Dataset, valid_dataset: torch.utils.data.Dataset) -> Tuple[Subset, Subset]:
+    """
+    Splits the training dataset into training and validation subsets.
+
+    Args:
+        seed (int): Random seed for reproducibility.
+        train_dataset (Dataset): The training dataset with training transforms.
+        valid_dataset (Dataset): The training dataset with testing transforms.
+
+    Returns:
+        Tuple[Subset, Subset]: The training and validation subsets.
+    """
+    num_samples = len(train_dataset)
     train_size = int(0.9 * num_samples)
     valid_size = num_samples - train_size
 
-    # torch.utils.data.random_split을 사용해 인덱스 분할을 위한 더미 리스트를 분할
     dummy_dataset = list(range(num_samples))
-    generator = torch.Generator().manual_seed(seed)  # 재현성을 위한 시드 설정
+    generator = torch.Generator().manual_seed(seed)
     train_idx_dataset, valid_idx_dataset = random_split(dummy_dataset, [train_size, valid_size], generator=generator)
 
-    # random_split은 Subset 객체를 반환하므로, 내부 인덱스 리스트를 추출합니다.
     train_indices = list(train_idx_dataset)
     valid_indices = list(valid_idx_dataset)
 
-    # 각각의 인덱스를 이용해 Subset 객체 생성 (각각 다른 transform 적용)
     train_dataset = Subset(train_dataset, train_indices)
     valid_dataset = Subset(valid_dataset, valid_indices)
     
     return train_dataset, valid_dataset
 
-def get_datasets(seed, data_dir):
+
+def get_datasets(seed: int, data_dir: str) -> Tuple[torch.utils.data.Dataset, torch.utils.data.Dataset, torch.utils.data.Dataset]:
+    """
+    Loads and prepares the CIFAR-10 datasets for training, validation, and testing.
+
+    Args:
+        seed (int): Random seed for dataset splitting.
+        data_dir (str): Directory to store the CIFAR-10 data.
+
+    Returns:
+        Tuple[Dataset, Dataset, Dataset]: The training, validation, and testing datasets.
+    """
     train_transform, test_transform = get_transforms()
 
     train_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=True, download=True, transform=train_transform)
@@ -58,10 +89,28 @@ def get_datasets(seed, data_dir):
     return train_dataset, valid_dataset, test_dataset
 
 
-def get_loaders(train_dataset, valid_dataset, test_dataset, batch_size, num_workers):
+def get_loaders(
+    train_dataset: torch.utils.data.Dataset,
+    valid_dataset: torch.utils.data.Dataset,
+    test_dataset: torch.utils.data.Dataset,
+    batch_size: int,
+    num_workers: int
+) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    """
+    Creates data loaders for the training, validation, and testing datasets.
+
+    Args:
+        train_dataset (Dataset): Training dataset.
+        valid_dataset (Dataset): Validation dataset.
+        test_dataset (Dataset): Testing dataset.
+        batch_size (int): Batch size.
+        num_workers (int): Number of worker threads for data loading.
+
+    Returns:
+        Tuple[DataLoader, DataLoader, DataLoader]: The training, validation, and testing data loaders.
+    """
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader  = DataLoader(test_dataset,  batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     return train_loader, valid_loader, test_loader
-    
