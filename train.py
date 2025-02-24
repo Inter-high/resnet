@@ -51,8 +51,10 @@ def my_app(cfg: DictConfig) -> None:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Build model (uncomment plain network if needed)
-    # model = get_plain_network(n=cfg['model']['n'], num_classes=cfg['model']['num_classes'])
-    model = get_resnet(n=cfg['model']['n'], num_classes=cfg['model']['num_classes'], shortcut_type=cfg['model']['type'])
+    if cfg['model']['resnet']:
+        model = get_resnet(n=cfg['model']['n'], num_classes=cfg['model']['num_classes'], shortcut_type=cfg['model']['type'])
+    else:
+        model = get_plain_network(n=cfg['model']['n'], num_classes=cfg['model']['num_classes'])
     model = model.to(device)
     logger.info(f"Model Parameters: {count_model_parameters(model):,}")
 
